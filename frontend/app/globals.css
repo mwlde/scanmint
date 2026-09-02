@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ScanMint brand palette — sampled directly from the logo artwork.
+   blue #5684BC (the circle), teal #56AABC (the folder), yellow #F4DE40 (the star). */
+:root {
+  --brand-blue: #5684BC;
+  --brand-teal: #56AABC;
+  --brand-yellow: #F4DE40;
+
+  /* Tints of the above, mixed over white, for fills and chips */
+  --brand-blue-tint: #EBF0F7;
+  --brand-blue-soft: #8AA7CE;
+  --brand-teal-tint: #EAF4F7;
+  --brand-yellow-tint: #FEFAE4;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}

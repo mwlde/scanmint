@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+venv/
+.venv/
+env/
+
+# Node / frontend
+node_modules/
+.next/
+.nuxt/
+
+# ML model weights (too large for git — store separately)
+*.pt
+*.pth
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Logs
+*.log
+
+# Test / coverage
+.coverage
+htmlcov/
+
+# Claude Code
+.claude/
+
+# Continue
+.continue/
+
+mynotes.md
+# ONNX exports
+*.onnx
+*.tsbuildinfo
