@@ -77,7 +77,7 @@ Guest mode works out of the box. Sign in to persist receipts across devices.
 
 ## Research
 
-ScanMint began as a course project, [SmartScan](https://github.com/mwlde/SmartScan), which paired an OpenCV preprocessing pipeline with a MobileNetV2 document classifier. The commercial evolution swaps the classifier for a vision LLM. What that swap costs and buys is written up in [RESEARCH.md](RESEARCH.md).
+ScanMint began as a course project,  which paired an OpenCV preprocessing pipeline with a MobileNetV2 document classifier. The commercial evolution swaps the classifier for a vision LLM. What that swap costs and buys is written up in [RESEARCH.md](RESEARCH.md) in the future.
 
 ---
 
