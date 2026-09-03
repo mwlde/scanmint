@@ -6,7 +6,7 @@ Turn a photo of a receipt into structured expense data in one tap.
 
 Point your camera at a receipt. ScanMint detects the edges, flattens the image, extracts the vendor, date, total, and line items with a vision model, and drops it into your receipts log with a running monthly total. Edit anything the model got wrong before you save.
 
-**Current version: v0.1** (fresh start, evolved from [SmartScan](https://github.com/mwlde/SmartScan))
+**Current version: v0.1** 
 
 ---
 
