@@ -1,39 +1,24 @@
 'use client'
 
+// Screen 02 — Camera
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, ZapIcon } from 'lucide-react'
-
-function CornerBracket({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) {
-  const rotation = { tl: 0, tr: 90, bl: 270, br: 180 }[position]
-  return (
-    <svg
-      width="36" height="36" viewBox="0 0 36 36" fill="none"
-      style={{
-        position: 'absolute',
-        ...(position.includes('r') ? { right: 0 } : { left: 0 }),
-        ...(position.includes('b') ? { bottom: 0 } : { top: 0 }),
-        transform: `rotate(${rotation}deg)`,
-      }}
-    >
-      <path
-        d="M2 20 L2 4 Q2 2 4 2 L20 2"
-        stroke="white" strokeWidth="3" strokeLinecap="round" fill="none"
-      />
-    </svg>
-  )
-}
+import { AutoIcon, GalleryIcon } from '@/components/icons'
 
 export default function CameraPage() {
   const router = useRouter()
   const videoRef = useRef<HTMLVideoElement>(null)
   const captureRef = useRef<HTMLCanvasElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const hasStarted = useRef(false)
+
   const [ready, setReady] = useState(false)
-  const [pulse, setPulse] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // "Auto" goes straight to processing; "Manual" detours through the corner
+  // adjustment screen first.
+  const [auto, setAuto] = useState(true)
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -45,7 +30,10 @@ export default function CameraPage() {
     hasStarted.current = true
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
+      .getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      })
       .then(stream => {
         streamRef.current = stream
         if (videoRef.current) {
@@ -56,17 +44,16 @@ export default function CameraPage() {
           }
         }
       })
-      .catch(() => setError('Camera access denied. Please allow camera permission and try again.'))
+      .catch(() => setError('Camera access denied. Allow camera permission, or upload a photo instead.'))
 
     return () => stop()
   }, [stop])
 
-  // Pulse animation for corner brackets
-  useEffect(() => {
-    if (!ready) return
-    const id = setInterval(() => setPulse(p => !p), 800)
-    return () => clearInterval(id)
-  }, [ready])
+  function handOff(dataUrl: string) {
+    sessionStorage.setItem('sm_image', dataUrl)
+    stop()
+    router.push(auto ? '/processing' : '/crop')
+  }
 
   function capture() {
     const video = videoRef.current
@@ -75,119 +62,116 @@ export default function CameraPage() {
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     canvas.getContext('2d')!.drawImage(video, 0, 0)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
-    sessionStorage.setItem('ss_image', dataUrl)
-    stop()
-    router.push('/processing')
+    handOff(canvas.toDataURL('image/jpeg', 0.92))
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-dvh bg-black gap-4 px-8 text-center">
-        <p className="text-white/70 text-sm">{error}</p>
-        <button onClick={() => router.push('/')} className="text-sm font-semibold" style={{ color: '#5684BC' }}>
-          ← Go back
-        </button>
-      </div>
-    )
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => handOff(reader.result as string)
+    reader.readAsDataURL(file)
   }
 
   return (
-    <div className="relative flex flex-col overflow-hidden" style={{ minHeight: '100dvh', backgroundColor: '#111' }}>
-      {/* Live video */}
-      <video
-        ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover"
-        playsInline
-        muted
+    <div className="screen screen-dark" style={{ position: 'relative', overflow: 'hidden' }}>
+      <video ref={videoRef} playsInline muted
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
       />
+      {/* Viewfinder texture stands in until the stream is live (and when the
+          camera is unavailable), matching the design's dark field. */}
+      {!ready && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'repeating-linear-gradient(45deg, #1a1a1a 0 20px, #1e1e1e 20px 21px)',
+        }} />
+      )}
+      <canvas ref={captureRef} style={{ display: 'none' }} />
 
-      {/* Vignette overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0,0,0,0.72) 100%)' }}
-      />
-
-      {/* Hidden canvas for capture */}
-      <canvas ref={captureRef} className="hidden" />
-
-      {/* UI chrome */}
-      <div className="relative z-10 flex flex-col" style={{ minHeight: '100dvh' }}>
-        {/* Top bar */}
-        <div className="flex items-center justify-between px-5 pt-14 pb-4">
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button
+            aria-label="Cancel"
             onClick={() => { stop(); router.push('/') }}
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            style={{
+              background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff',
+              font: "500 14px/1 'Inter'", padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+            }}
           >
-            <X size={20} color="white" />
+            Cancel
           </button>
-          <div
-            className="px-3 py-1 rounded-full text-xs font-medium"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.85)' }}
-          >
-            Tap to capture
-          </div>
-          <div className="w-10" />
-        </div>
-
-        {/* Document frame */}
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <p className="text-xs font-medium mb-4 tracking-wide" style={{ color: 'rgba(255,255,255,0.85)' }}>
-            Align document within frame
-          </p>
-
-          {/* Corner bracket frame */}
-          <div className="relative" style={{ width: '74%', aspectRatio: '0.707 / 1' }}>
-            {(['tl', 'tr', 'bl', 'br'] as const).map(pos => (
-              <div
-                key={pos}
-                style={{
-                  position: 'absolute',
-                  ...(pos.includes('r') ? { right: 0 } : { left: 0 }),
-                  ...(pos.includes('b') ? { bottom: 0 } : { top: 0 }),
-                  opacity: pulse ? 1 : 0.55,
-                  transition: 'opacity 0.7s ease-in-out',
-                  filter: pulse ? 'drop-shadow(0 0 6px rgba(255,255,255,0.8))' : 'none',
-                }}
-              >
-                <CornerBracket position={pos} />
-              </div>
-            ))}
-            <div
-              className="absolute inset-0 rounded-sm"
-              style={{ border: '1px solid rgba(255,255,255,0.18)' }}
-            />
-          </div>
-
-          <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.6)', maxWidth: '200px' }}>
-            Hold steady, then tap the button to capture.
-          </p>
-        </div>
-
-        {/* Bottom bar */}
-        <div className="flex items-center justify-center pb-12 pt-4 gap-10">
-          <div className="w-10 h-10" />
-
-          {/* Capture button */}
           <button
+            onClick={() => setAuto(a => !a)}
+            aria-pressed={auto}
+            style={{
+              background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', padding: 8,
+              borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center',
+              gap: 6, font: "500 13px/1 'Inter'",
+            }}
+          >
+            <AutoIcon />
+            {auto ? 'Auto' : 'Manual'}
+          </button>
+        </div>
+
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%',
+          transform: 'translate(-50%, -55%)', width: 220, height: 340, zIndex: 2,
+        }}>
+          <div style={{
+            width: '100%', height: '100%',
+            border: '1.5px dashed rgba(255,255,255,0.55)', borderRadius: 4, position: 'relative',
+          }}>
+            {([
+              { top: -1, left: -1, borderTop: '2px solid #fff', borderLeft: '2px solid #fff' },
+              { top: -1, right: -1, borderTop: '2px solid #fff', borderRight: '2px solid #fff' },
+              { bottom: -1, left: -1, borderBottom: '2px solid #fff', borderLeft: '2px solid #fff' },
+              { bottom: -1, right: -1, borderBottom: '2px solid #fff', borderRight: '2px solid #fff' },
+            ] as const).map((s, i) => (
+              <div key={i} style={{ position: 'absolute', width: 22, height: 22, ...s }} />
+            ))}
+          </div>
+          <div style={{
+            textAlign: 'center', font: "400 12px/1.4 'Inter'",
+            color: 'rgba(255,255,255,0.75)', marginTop: 14,
+          }}>
+            {error ?? 'Align receipt within the frame'}
+          </div>
+        </div>
+
+        <div style={{
+          marginTop: 'auto', padding: '0 32px 40px', position: 'relative', zIndex: 2,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <button
+            aria-label="Upload from library"
+            onClick={() => fileRef.current?.click()}
+            style={{
+              background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)',
+              width: 48, height: 48, borderRadius: 12, display: 'flex',
+              alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}
+          >
+            <GalleryIcon />
+          </button>
+          <button
+            aria-label="Capture"
             onClick={capture}
             disabled={!ready}
-            className="relative flex items-center justify-center transition-all active:scale-95 disabled:opacity-40"
-            style={{ width: '72px', height: '72px', borderRadius: '50%', border: '3px solid white' }}
+            style={{
+              width: 76, height: 76, borderRadius: '50%', border: '3px solid #fff',
+              background: 'transparent', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', cursor: ready ? 'pointer' : 'not-allowed',
+              padding: 0, opacity: ready ? 1 : 0.4, transition: 'transform .12s',
+            }}
           >
-            <div className="rounded-full" style={{ width: '58px', height: '58px', backgroundColor: 'white' }} />
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#fff' }} />
           </button>
-
-          {/* Flash placeholder */}
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
-          >
-            <ZapIcon size={18} color="white" />
-          </div>
+          <div style={{ width: 48 }} />
         </div>
       </div>
+
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
     </div>
   )
 }

@@ -1,352 +1,412 @@
 'use client'
 
+// Screens 05 / 05b — Review card, and the extraction-failed variant.
+//
+// Numeric fields are held as text while editing and only parsed on save.
+// Parsing per keystroke makes decimals impossible to type: "18." parses to 18
+// and the input snaps back before the user can reach the cents.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bookmark, BookmarkCheck, Download, FolderOpen, RotateCcw, Save, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
-import { BottomNav } from '@/components/BottomNav'
-import { scanStore, type ScanResult } from '@/lib/scanStore'
-import { toggleSaved, getHistory } from '@/lib/history'
-import { getFolders, addItemToFolder, type Folder } from '@/lib/folders'
-import { useDogeMode } from '@/lib/useDogeMode'
+import { BackIcon } from '@/components/icons'
+import { draftStore } from '@/lib/receiptDraft'
+import {
+  CATEGORIES,
+  saveReceipt,
+  toNumber,
+  updateReceipt,
+  type Category,
+  type ReceiptDraft,
+} from '@/lib/receipts'
 
-const SLIDES = [
-  { key: 'scan',             label: 'Final',     sub: 'Binarized scan'     },
-  { key: 'warped',           label: 'Warped',    sub: 'Cropped & levelled' },
-  { key: 'original',         label: 'Original',  sub: 'Input image'        },
-  { key: 'detected_overlay', label: 'Detected',  sub: 'Document edge'      },
-  { key: 'region_overlay',   label: 'Regions',   sub: 'Text segments'      },
-] as const
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD']
 
-function b64Src(b64: string) {
-  return `data:image/png;base64,${b64}`
+type ItemForm = {
+  description: string
+  quantity: string
+  unit_price: string
+  line_total: string
 }
 
-export default function ResultsPage() {
-  const router = useRouter()
-  const dogeMode = useDogeMode()
-  const [scan, setScan] = useState<ScanResult | null>(null)
-  const [isSaved, setIsSaved] = useState(false)
-  const [showSaveSheet, setShowSaveSheet] = useState(false)
-  const [folderStep, setFolderStep] = useState(false)
-  const [folders, setFolders] = useState<Folder[]>([])
-  const [toast, setToast] = useState<string | null>(null)
-  const [activeSlide, setActiveSlide] = useState(0)
-  const carouselRef = useRef<HTMLDivElement>(null)
+type Form = {
+  vendor: string
+  purchase_date: string
+  total: string
+  subtotal: string
+  tax: string
+  currency: string
+  category: Category | null
+  line_items: ItemForm[]
+  image_url: string | null
+}
 
-  function handleCarouselScroll() {
-    const el = carouselRef.current
-    if (!el) return
-    setActiveSlide(Math.round(el.scrollLeft / el.clientWidth))
+const numText = (n: number | null) => (n === null ? '' : String(n))
+const todayISO = () => new Date().toISOString().slice(0, 10)
+
+function toForm(d: ReceiptDraft): Form {
+  return {
+    vendor: d.vendor ?? '',
+    // A receipt with no date would fall outside every month bucket and never
+    // appear in the list, so it defaults to today rather than staying empty.
+    purchase_date: d.purchase_date ?? todayISO(),
+    total: numText(d.total),
+    subtotal: numText(d.subtotal),
+    tax: numText(d.tax),
+    currency: d.currency || 'USD',
+    category: d.category,
+    line_items: d.line_items.map(i => ({
+      description: i.description,
+      quantity: String(i.quantity ?? 1),
+      unit_price: numText(i.unit_price),
+      line_total: numText(i.line_total),
+    })),
+    image_url: d.image_url,
   }
+}
+
+function toDraft(f: Form, base: ReceiptDraft): ReceiptDraft {
+  return {
+    ...base,
+    vendor: f.vendor.trim() || null,
+    purchase_date: f.purchase_date || null,
+    total: toNumber(f.total),
+    subtotal: toNumber(f.subtotal),
+    tax: toNumber(f.tax),
+    currency: f.currency,
+    category: f.category,
+    line_items: f.line_items.map(i => ({
+      description: i.description,
+      quantity: toNumber(i.quantity) ?? 1,
+      unit_price: toNumber(i.unit_price),
+      line_total: toNumber(i.line_total),
+    })),
+    image_url: f.image_url,
+  }
+}
+
+export default function ReviewPage() {
+  const router = useRouter()
+  const [base, setBase] = useState<ReceiptDraft | null>(null)
+  const [form, setForm] = useState<Form | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [manualEntry, setManualEntry] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
-    const result = scanStore.getScan()
-    if (!result) { router.replace('/'); return }
-    setScan(result)
-    // Reflect saved state if user navigated back to this screen
-    const id = scanStore.getCurrentId()
-    if (id) {
-      const item = getHistory().find(i => i.id === id)
-      setIsSaved(item?.saved ?? false)
+    const d = draftStore.get()
+    if (!d) {
+      router.replace('/')
+      return
     }
-    setFolders(getFolders())
+    setBase(d)
+    setForm(toForm(d))
+    setFailed(draftStore.didFail())
+    setEditingId(draftStore.editingId())
   }, [router])
 
-  if (!scan) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-white">
-        <div
-          className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: '#5684BC', borderTopColor: 'transparent' }}
-        />
-      </div>
+  if (!form || !base) return null
+
+  const set = (next: Partial<Form>) => setForm(f => (f ? { ...f, ...next } : f))
+
+  const setItem = (index: number, next: Partial<ItemForm>) =>
+    setForm(f =>
+      f ? { ...f, line_items: f.line_items.map((it, i) => (i === index ? { ...it, ...next } : it)) } : f,
     )
+
+  const addItem = () =>
+    setForm(f =>
+      f
+        ? { ...f, line_items: [...f.line_items, { description: '', quantity: '1', unit_price: '', line_total: '' }] }
+        : f,
+    )
+
+  const removeItem = (index: number) =>
+    setForm(f => (f ? { ...f, line_items: f.line_items.filter((_, i) => i !== index) } : f))
+
+  async function save() {
+    if (!form || !base) return
+    const draft = toDraft(form, base)
+    if (draft.total === null) return
+
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const saved = editingId ? await updateReceipt(editingId, draft) : await saveReceipt(draft)
+      draftStore.clear()
+      router.push(`/receipts/${saved.id}`)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Could not save this receipt.')
+      setSaving(false)
+    }
+  }
+
+  function discard() {
+    draftStore.clear()
+    router.push('/')
+  }
+
+  const totalValue = toNumber(form.total)
+  const missingTotal = totalValue === null
+  const showErrorBanner = failed && !manualEntry
+  const bareInput: React.CSSProperties = {
+    border: 'none',
+    outline: 'none',
+    padding: 0,
+    background: 'transparent',
   }
 
   return (
-    <div className="flex flex-col" style={{ minHeight: '100dvh', backgroundColor: '#F5F5F5' }}>
-      <div className="h-11 flex-shrink-0" />
-
-      {/* Header */}
-      <div className="px-5 pt-3 pb-4 bg-white">
-        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#888' }}>
-          {dogeMode ? 'Sniff Result' : 'Scan Result'}
-        </p>
-        <h2 className="text-xl font-bold mt-0.5" style={{ color: '#1A1A1A' }}>
-          {dogeMode ? 'Document Sniffed' : 'Document Analysis'}
-        </h2>
+    <div className="screen">
+      <div style={{ padding: '12px 20px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button aria-label="Back" onClick={() => router.back()}
+          style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}>
+          <BackIcon />
+        </button>
+        <div style={{ font: "600 15px/1 'Inter'" }}>{editingId ? 'Edit' : 'Review'}</div>
+        <div style={{ width: 24 }} />
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 flex flex-col gap-4">
-
-        {/* No-document warning */}
-        {!scan.document_found && (
-          <div className="flex gap-3 p-4 rounded-2xl" style={{ backgroundColor: '#FEF3E2' }}>
-            <AlertTriangle size={18} style={{ color: '#F5A623', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-sm" style={{ color: '#F5A623' }}>
-              No document boundary detected — full frame used as fallback.
-            </p>
-          </div>
-        )}
-
-        {/* Swipeable image carousel */}
-        <div className="rounded-2xl overflow-hidden shadow-sm bg-white">
-          {/* Scroll track */}
-          <div
-            ref={carouselRef}
-            className="flex overflow-x-auto [&::-webkit-scrollbar]:hidden"
-            style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none', height: '52vh' }}
-            onScroll={handleCarouselScroll}
-          >
-            {SLIDES.map(({ key, label }) => {
-              const src = scan[key as keyof ScanResult] as string | undefined
-              return (
-                <div
-                  key={key}
-                  className="flex-none w-full h-full flex items-center justify-center"
-                  style={{ scrollSnapAlign: 'start', backgroundColor: '#F8F8F8' }}
-                >
-                  {src ? (
-                    <img src={b64Src(src)} alt={label} className="w-full h-full object-contain" />
-                  ) : (
-                    <p className="text-xs" style={{ color: '#BBBBBB' }}>—</p>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Slide label + dot indicators */}
-          <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: '#F0F0F0' }}>
-            <div>
-              <p className="text-sm font-bold" style={{ color: '#1A1A1A' }}>
-                {SLIDES[activeSlide].label}
-              </p>
-              <p className="text-xs" style={{ color: '#888' }}>
-                {SLIDES[activeSlide].sub}
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {SLIDES.map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    height: 6,
-                    width: i === activeSlide ? 18 : 6,
-                    borderRadius: 3,
-                    backgroundColor: i === activeSlide ? '#5684BC' : '#D8D8D8',
-                    transition: 'all 0.2s',
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Stat chips */}
-        <div className="flex gap-2">
-          {[
-            { label: dogeMode ? 'Sniff Time' : 'Latency',  value: `${Math.round(scan.total_ms)} ms` },
-            { label: 'Regions',  value: String(scan.regions.length) },
-            {
-              label: dogeMode ? 'Found it!' : 'Found',
-              value: scan.document_found ? 'Yes' : 'No',
-              icon: scan.document_found
-                ? <CheckCircle2 size={12} style={{ color: '#3BB273' }} />
-                : <XCircle size={12} style={{ color: '#D4183D' }} />,
-            },
-          ].map(({ label, value, icon }) => (
-            <div
-              key={label}
-              className="flex-1 flex flex-col items-center py-3 rounded-2xl"
-              style={{ backgroundColor: 'white' }}
-            >
-              <span className="text-xs" style={{ color: '#888' }}>{label}</span>
-              <div className="flex items-center gap-1 mt-0.5">
-                {icon}
-                <span className="text-sm font-bold" style={{ color: '#1A1A1A' }}>{value}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-3 pb-2">
-          <button
-            onClick={() => router.push('/')}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold text-sm transition-all active:scale-95 border-2"
-            style={{ borderColor: '#5684BC', color: '#5684BC' }}
-          >
-            <RotateCcw size={16} />
-            {dogeMode ? 'Sniff Again' : 'Scan Again'}
-          </button>
-          <button
-            onClick={() => setShowSaveSheet(true)}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold text-sm text-white transition-all active:scale-95"
-            style={{ backgroundColor: isSaved ? '#3BB273' : '#5684BC' }}
-          >
-            {isSaved ? <BookmarkCheck size={16} /> : <Save size={16} />}
-            {isSaved
-              ? (dogeMode ? <>Buried! <img src="/bone.png" alt="bone" style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle' }} /></> : 'Saved!')
-              : (dogeMode ? <>Bury Result <img src="/bone.png" alt="bone" style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle' }} /></> : 'Save Result')}
-          </button>
-        </div>
-      </div>
-
-      {/* Save options sheet */}
-      {showSaveSheet && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
-          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-          onClick={() => { setShowSaveSheet(false); setFolderStep(false) }}
-        >
-          <div
-            className="bg-white rounded-t-3xl px-5 pt-5 pb-10"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ backgroundColor: '#E0E0E0' }} />
-
-            {!folderStep ? (
-              <>
-                <h3 className="text-base font-bold mb-1" style={{ color: '#1A1A1A' }}>
-                  {dogeMode ? <>Bury This Sniff <img src="/bone.png" alt="bone" style={{ width: 16, height: 16, display: 'inline-block', verticalAlign: 'middle' }} /></> : 'Save Scan'}
-                </h3>
-                <p className="text-sm mb-5" style={{ color: '#888' }}>
-                  {dogeMode ? 'Where should this sniff go?' : 'Choose where to save this result.'}
-                </p>
-
-                <div className="flex flex-col gap-3">
-                  {/* Save to App */}
-                  <button
-                    onClick={() => {
-                      const id = scanStore.getCurrentId()
-                      if (id && !isSaved) { toggleSaved(id); setIsSaved(true) }
-                      if (folders.length > 0) {
-                        setFolderStep(true)
-                      } else {
-                        setShowSaveSheet(false)
-                        setToast(isSaved ? 'Already saved to app' : 'Saved to app')
-                      }
-                    }}
-                    className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-left transition-all active:scale-[0.98]"
-                    style={{ backgroundColor: '#EBF0F7' }}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: '#5684BC' }}
-                    >
-                      {isSaved ? <BookmarkCheck size={20} color="white" /> : <Bookmark size={20} color="white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>
-                        {dogeMode ? `Bury in App${isSaved ? ' ✓' : ''}` : `Save to App${isSaved ? ' ✓' : ''}`}
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: '#8AA7CE' }}>
-                        {dogeMode ? 'Hide the bone in your sniff log' : 'Bookmark in your scan history'}
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Save to Device */}
-                  <button
-                    onClick={() => {
-                      if (!scan) return
-                      const a = document.createElement('a')
-                      a.href = `data:image/png;base64,${scan.scan}`
-                      a.download = `scanmint_scan_${Date.now()}.png`
-                      document.body.appendChild(a)
-                      a.click()
-                      document.body.removeChild(a)
-                      setShowSaveSheet(false)
-                      setToast('Saved to device')
-                    }}
-                    className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-left transition-all active:scale-[0.98]"
-                    style={{ backgroundColor: '#F5F5F5' }}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: '#1A1A1A' }}
-                    >
-                      <Download size={20} color="white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>Save to Device</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#888' }}>Download final scan as PNG</p>
-                    </div>
-                  </button>
-                </div>
-              </>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 140px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <div className="placeholder-img" style={{ width: 84, height: 112, borderRadius: 8 }}>
+            {form.image_url ? (
+              <img src={form.image_url} alt="Flattened receipt"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <>
-                {/* Folder assignment step */}
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle2 size={18} style={{ color: '#3BB273' }} />
-                  <p className="text-base font-bold" style={{ color: '#1A1A1A' }}>Saved to app!</p>
-                </div>
-                <p className="text-sm mb-4" style={{ color: '#888' }}>Add to a folder? (optional)</p>
-
-                <div className="flex flex-col gap-2 mb-4">
-                  {folders.map(f => (
-                    <button
-                      key={f.id}
-                      onClick={() => {
-                        const id = scanStore.getCurrentId()
-                        if (id) addItemToFolder(f.id, id)
-                        setShowSaveSheet(false)
-                        setFolderStep(false)
-                        setToast(`Added to ${f.name}`)
-                      }}
-                      className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all active:scale-[0.98]"
-                      style={{ backgroundColor: f.bg }}
-                    >
-                      <FolderOpen size={18} style={{ color: f.color }} />
-                      <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{f.name}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => { setShowSaveSheet(false); setFolderStep(false); setToast('Saved to app') }}
-                  className="w-full py-2 text-sm font-semibold"
-                  style={{ color: '#888' }}
-                >
-                  Skip
-                </button>
-              </>
+              'Flattened'
             )}
           </div>
         </div>
-      )}
 
-      {/* Toast */}
-      {toast && (
-        <ToastBanner message={toast} onDone={() => setToast(null)} />
-      )}
+        {showErrorBanner && (
+          <div style={{ border: '1px solid var(--ink)', borderRadius: 12, padding: 14, marginBottom: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{
+                width: 22, height: 22, border: '1.5px solid var(--ink)', borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 1,
+              }}>
+                <div style={{ width: 2, height: 8, background: 'var(--ink)', borderRadius: 1 }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ font: "600 14px/1.3 'Inter'" }}>We couldn&apos;t read this receipt.</div>
+                <div style={{ font: "400 12.5px/1.5 'Inter'", color: 'var(--ink-2)', marginTop: 4 }}>
+                  The image was too blurry or dark to extract fields. Retake the photo, or enter the details by hand.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button
+                onClick={() => router.push('/camera')}
+                style={{
+                  flex: 1, background: 'var(--ink)', color: 'var(--on-ink)', border: 'none',
+                  borderRadius: 8, height: 40, font: "600 13px/1 'Inter'", cursor: 'pointer',
+                }}
+              >
+                Retry scan
+              </button>
+              <button
+                onClick={() => setManualEntry(true)}
+                style={{
+                  flex: 1, background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--ink)',
+                  borderRadius: 8, height: 40, font: "600 13px/1 'Inter'", cursor: 'pointer',
+                }}
+              >
+                Enter manually
+              </button>
+            </div>
+          </div>
+        )}
 
-      <BottomNav />
-    </div>
-  )
-}
+        <label className="label" htmlFor="vendor">Vendor</label>
+        <input
+          id="vendor"
+          className="input"
+          placeholder="Add vendor"
+          value={form.vendor}
+          onChange={e => set({ vendor: e.target.value })}
+        />
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
+        <label className="label" htmlFor="date" style={{ marginTop: 14 }}>Date</label>
+        <input
+          id="date"
+          className="input"
+          type="date"
+          value={form.purchase_date}
+          onChange={e => set({ purchase_date: e.target.value })}
+        />
 
-function ToastBanner({ message, onDone }: { message: string; onDone: () => void }) {
-  const onDoneRef = useRef(onDone)
-  onDoneRef.current = onDone
-  useEffect(() => {
-    const t = setTimeout(() => onDoneRef.current(), 2500)
-    return () => clearTimeout(t)
-  }, [])
-  return (
-    <div className="fixed bottom-24 left-4 right-4 z-50 flex justify-center pointer-events-none">
-      <div
-        className="px-5 py-3 rounded-2xl shadow-lg flex items-center gap-2"
-        style={{ backgroundColor: '#1A1A1A', color: 'white' }}
-      >
-        <CheckCircle2 size={15} style={{ color: '#3BB273', flexShrink: 0 }} />
-        <span className="text-sm font-medium">{message}</span>
+        <div style={{ marginTop: 18, padding: 14, border: '1.5px solid var(--ink)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label className="label" htmlFor="total" style={{ margin: 0 }}>Total · Required</label>
+            {missingTotal && <div style={{ font: "500 11px/1 'Inter'", color: 'var(--ink)' }}>Missing</div>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+            <div style={{ font: "400 14px/1 'Inter'", color: missingTotal ? 'var(--disabled)' : 'var(--muted)' }}>$</div>
+            <input
+              id="total"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.total}
+              onChange={e => set({ total: e.target.value })}
+              style={{
+                ...bareInput,
+                font: "700 32px/1 'Inter'",
+                letterSpacing: '-0.01em',
+                width: '100%',
+                color: missingTotal ? 'var(--disabled)' : 'var(--ink)',
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
+          <div>
+            <label className="label" htmlFor="currency">Currency</label>
+            <select
+              id="currency"
+              className="input"
+              style={{ padding: '0 10px', appearance: 'none' }}
+              value={form.currency}
+              onChange={e => set({ currency: e.target.value })}
+            >
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="subtotal">Subtotal</label>
+            <input
+              id="subtotal" className="input" inputMode="decimal" placeholder="0.00"
+              style={{ padding: '0 10px' }}
+              value={form.subtotal}
+              onChange={e => set({ subtotal: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="tax">Tax</label>
+            <input
+              id="tax" className="input" inputMode="decimal" placeholder="0.00"
+              style={{ padding: '0 10px' }}
+              value={form.tax}
+              onChange={e => set({ tax: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="label" style={{ marginTop: 18 }}>Category</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {CATEGORIES.map(c => (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={form.category === c}
+              className={form.category === c ? 'chip chip-active' : 'chip'}
+              onClick={() => set({ category: form.category === c ? null : c })}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 22, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ font: "600 13px/1 'Inter'" }}>
+              Line items{' '}
+              <span style={{ color: 'var(--disabled)', fontWeight: 500 }}>{form.line_items.length}</span>
+            </div>
+            <button
+              onClick={addItem}
+              style={{
+                background: 'none', border: 'none', font: "500 12px/1 'Inter'", color: 'var(--ink-2)',
+                textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer', padding: 4,
+              }}
+            >
+              Add item
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+            {form.line_items.map((item, i) => (
+              <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    aria-label={`Line item ${i + 1} description`}
+                    placeholder="Item"
+                    value={item.description}
+                    onChange={e => setItem(i, { description: e.target.value })}
+                    style={{ ...bareInput, font: "500 13.5px/1.3 'Inter'", flex: 1, color: 'var(--ink)' }}
+                  />
+                  <button
+                    aria-label={`Remove line item ${i + 1}`}
+                    onClick={() => removeItem(i)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                      font: "500 12px/1 'Inter'", color: 'var(--muted)',
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    font: "400 12px/1 'Inter'", color: 'var(--muted)',
+                  }}>
+                    <span>Qty</span>
+                    <input
+                      aria-label={`Line item ${i + 1} quantity`}
+                      inputMode="decimal"
+                      value={item.quantity}
+                      onChange={e => setItem(i, { quantity: e.target.value })}
+                      style={{ ...bareInput, width: 34, font: "400 12px/1 'Inter'", color: 'var(--muted)' }}
+                    />
+                    <span>·</span>
+                    <span>$</span>
+                    <input
+                      aria-label={`Line item ${i + 1} unit price`}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={item.unit_price}
+                      onChange={e => setItem(i, { unit_price: e.target.value })}
+                      style={{ ...bareInput, width: 52, font: "400 12px/1 'Inter'", color: 'var(--muted)' }}
+                    />
+                  </div>
+                  <input
+                    aria-label={`Line item ${i + 1} total`}
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={item.line_total}
+                    onChange={e => setItem(i, { line_total: e.target.value })}
+                    style={{
+                      ...bareInput, width: 64, textAlign: 'right',
+                      font: "500 12px/1 'Inter'", color: 'var(--ink)',
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {saveError && (
+          <div role="alert" style={{ font: "400 12.5px/1.5 'Inter'", color: 'var(--ink)', marginTop: 16 }}>
+            {saveError}
+          </div>
+        )}
+      </div>
+
+      <div style={{
+        position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 0,
+        width: '100%', maxWidth: 430, background: 'var(--surface)',
+        borderTop: '1px solid var(--line)',
+        padding: '14px 20px calc(30px + env(safe-area-inset-bottom, 0px))',
+        display: 'flex', gap: 10,
+      }}>
+        <button className="btn-secondary" style={{ flex: 1 }} onClick={discard}>Discard</button>
+        <button className="btn-primary" style={{ flex: 1.6 }} onClick={save} disabled={missingTotal || saving}>
+          {saving ? 'Saving…' : 'Save receipt'}
+        </button>
       </div>
     </div>
   )

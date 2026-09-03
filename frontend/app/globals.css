@@ -4,14 +4,29 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-/* ScanMint brand palette — sampled directly from the logo artwork.
-   blue #5684BC (the circle), teal #56AABC (the folder), yellow #F4DE40 (the star). */
+/* ── ScanMint design tokens ───────────────────────────────────────────────────
+   Greyscale, straight from the v1 wireframes: primary actions solid black,
+   secondary outlined, no colour anywhere. Every screen reads its colours from
+   these variables and nothing else, so a later brand pass is a change to this
+   block rather than a pass over all eleven screens. */
 :root {
+  --ink: #111111;          /* primary actions, headings, body text */
+  --ink-2: #555555;        /* secondary copy */
+  --muted: #777777;        /* labels, metadata */
+  --disabled: #a5a29c;     /* placeholder text, inactive nav, empty values */
+  --line: #ececec;         /* dividers, card borders */
+  --line-2: #d0cec9;       /* input and chip borders */
+  --line-3: #f2f0ec;       /* list row separators, lighter than --line */
+  --surface: #ffffff;      /* screen background */
+  --surface-2: #f4f2ee;    /* placeholder fills, pressed rows */
+  --canvas: #efeeea;       /* page behind the app frame */
+  --on-ink: #ffffff;       /* text on a solid --ink fill */
+
+  /* Legacy SmartScan palette. Still read by lib/folders.ts and the saved and
+     history screens, which the v1 design does not cover. */
   --brand-blue: #5684BC;
   --brand-teal: #56AABC;
   --brand-yellow: #F4DE40;
-
-  /* Tints of the above, mixed over white, for fills and chips */
   --brand-blue-tint: #EBF0F7;
   --brand-blue-soft: #8AA7CE;
   --brand-teal-tint: #EAF4F7;
@@ -26,4 +41,225 @@ html, body {
   height: 100%;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Screen scaffold ────────────────────────────────────────────────────────
+   The wireframes draw a 390x844 device frame with a fake status bar and home
+   indicator. That is canvas presentation, not app UI, so it is deliberately
+   not reproduced here — .screen is the content area the frame contained. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--surface);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.screen-dark {
+  background: #1a1a1a;
+  color: var(--on-ink);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────────*/
+.btn-primary {
+  background: var(--ink);
+  color: var(--on-ink);
+  border: none;
+  border-radius: 12px;
+  height: 52px;
+  font: 600 15px/1 'Inter', system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.btn-primary:disabled {
+  background: var(--surface-2);
+  color: #c8c6c1;
+  border: 1px solid var(--line);
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  height: 52px;
+  font: 600 15px/1 'Inter', system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  width: 100%;
+}
+
+.btn-link {
+  background: transparent;
+  color: var(--ink);
+  border: none;
+  font: 500 14px/1 'Inter', system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 8px;
+}
+
+/* ── Form controls ──────────────────────────────────────────────────────────*/
+.input {
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  height: 46px;
+  padding: 0 14px;
+  font: 400 15px/1 'Inter', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--disabled);
+}
+
+.input:focus {
+  border-color: var(--ink);
+}
+
+.input-lg {
+  font-size: 22px;
+  font-weight: 600;
+  height: 58px;
+}
+
+.label {
+  font: 500 11px/1 'Inter', system-ui, sans-serif;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* ── Chips ──────────────────────────────────────────────────────────────────*/
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  font: 500 13px/1 'Inter', system-ui, sans-serif;
+  color: #333333;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+}
+
+/* 44px minimum hit target without changing the 34px visual box */
+.chip::before {
+  content: '';
+  position: absolute;
+  inset: -5px -4px;
+}
+
+.chip-active {
+  background: var(--ink);
+  color: var(--on-ink);
+  border-color: var(--ink);
+}
+
+.chip-muted {
+  color: var(--disabled);
+  border-color: #e4e2dd;
+  cursor: default;
+}
+
+.hit-44 {
+  position: relative;
+}
+
+.hit-44::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Structure ──────────────────────────────────────────────────────────────*/
+.section-head {
+  font: 600 12px/1 'Inter', system-ui, sans-serif;
+  color: #666666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 20px 20px 10px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+}
+
+.placeholder-img {
+  background: var(--surface-2);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    rgba(0, 0, 0, 0.04) 10px 11px
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999999;
+  font: 500 10.5px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* ── Bottom navigation ──────────────────────────────────────────────────────*/
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 100%;
+  max-width: 430px;
+  height: calc(82px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  z-index: 40;
+}
+
+.bottom-nav .item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font: 500 10.5px/1 'Inter', system-ui, sans-serif;
+  color: var(--disabled);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.bottom-nav .item.active {
+  color: var(--ink);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

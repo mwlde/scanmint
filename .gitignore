@@ -45,3 +45,10 @@ mynotes.md
 # ONNX exports
 *.onnx
 *.tsbuildinfo
+
+# Locally saved flattened scans (dev scaffolding)
+backend/scans/
+
+# Claude Design exports (self-extracting bundles, ~0.5MB each)
+ScanMint.html
+*.dc.html

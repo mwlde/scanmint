@@ -31,7 +31,11 @@ class ScanResult:
 # order is: enhance, detect corners, warp, binarize, segment regions
 # each step is timed so we can see where time is being spent
 # work_height controls the resolution used for corner detection (lower = faster but less accurate)
-def scan_document(image, work_height=500):
+#
+# corners is the manual override from the frontend's corner adjustment screen. when given it's a
+# (4,2) array in image pixel coords and detection is skipped entirely, bc the user has already
+# told us where the receipt is and re-detecting would just overrule them.
+def scan_document(image, work_height=500, corners=None):
     t = {}
 
     t0 = time.perf_counter()
@@ -39,7 +43,11 @@ def scan_document(image, work_height=500):
     t["enhance"] = (time.perf_counter() - t0) * 1000
 
     t0 = time.perf_counter()
-    corners, found = document_detection.find_document_contour(enhanced, work_height=work_height)
+    if corners is not None:
+        corners = np.asarray(corners, dtype="float32").reshape(4, 2)
+        found = True
+    else:
+        corners, found = document_detection.find_document_contour(enhanced, work_height=work_height)
     t["detect"] = (time.perf_counter() - t0) * 1000
     overlay = document_detection.draw_contour(image, corners)
 

@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
@@ -17,8 +16,25 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ fontFamily: 'Inter, system-ui, sans-serif', margin: 0, padding: 0, backgroundColor: '#F5F5F5' }}>
-        <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100dvh', position: 'relative', overflow: 'hidden', backgroundColor: 'white' }}>
+      <body
+        style={{
+          fontFamily: "Inter, system-ui, sans-serif",
+          margin: 0,
+          padding: 0,
+          backgroundColor: 'var(--canvas)',
+          color: 'var(--ink)',
+          WebkitFontSmoothing: 'antialiased',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '430px',
+            margin: '0 auto',
+            minHeight: '100dvh',
+            position: 'relative',
+            backgroundColor: 'var(--surface)',
+          }}
+        >
           {children}
         </div>
       </body>
