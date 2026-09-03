@@ -2,7 +2,7 @@
 -- Fix Supabase security linter warnings
 -- 1. monthly_totals view: SECURITY DEFINER -> security_invoker (ERROR)
 -- 2. set_updated_at: pin search_path (WARN)
--- 3. rls_auto_enable: revoke public API execute grants (WARN x2)
+-- 3. rls_auto_enable: drop the dashboard-created RLS safety net (WARN x2)
 -- ============================================================================
 
 
@@ -38,6 +38,7 @@ grant select on public.monthly_totals to authenticated;
 -- ----------------------------------------------------------------------------
 -- 2. Pin search_path on set_updated_at.
 --    Empty search_path forces fully qualified references inside the function.
+--    now() resolves regardless: pg_catalog is always searched implicitly.
 -- ----------------------------------------------------------------------------
 
 create or replace function public.set_updated_at()
@@ -54,9 +55,25 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- 3. Revoke API execute on rls_auto_enable.
---    The event trigger 'ensure_rls' still fires on DDL (event triggers do not
---    require EXECUTE grants), but the /rest/v1/rpc endpoint is now closed.
+-- 3. Drop the rls_auto_enable safety net.
+--
+--    The function and its 'ensure_rls' event trigger were created through the
+--    Supabase dashboard and are not captured in any migration here, so the
+--    schema in this repo does not describe the database. Rather than adopt
+--    them, drop them: both tables in this schema enable RLS explicitly in
+--    20260902073325_create_receipts_schema.sql, so the net guards nothing that
+--    is not already guarded. Dropping also closes the /rest/v1/rpc endpoint
+--    outright, which is stronger than revoking EXECUTE on it.
+--
+--    Trade-off accepted: a table added later no longer gets RLS enabled
+--    automatically. New tables must enable it in their own migration.
+--
+--    Guarded because a fresh environment (db reset, CI, a new project) never
+--    had these objects, and unguarded DROPs would abort the migration there.
+--    The event trigger is dropped first — the function cannot be dropped while
+--    a trigger still depends on it.
 -- ----------------------------------------------------------------------------
 
-revoke execute on function public.rls_auto_enable() from anon, authenticated, public;
+drop event trigger if exists ensure_rls;
+
+drop function if exists public.rls_auto_enable();
