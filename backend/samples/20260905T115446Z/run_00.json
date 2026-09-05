@@ -1,0 +1,75 @@
+{
+  "run": 0,
+  "started": "2026-09-05T11:54:46.318009+00:00",
+  "success": true,
+  "error": null,
+  "vendor": "Berghotel Grosse Scheidegg",
+  "purchase_date": "2007-07-30",
+  "subtotal": 50.65,
+  "tax": 3.85,
+  "total": 54.5,
+  "currency": "CHF",
+  "category": "Food",
+  "line_item_count": 4,
+  "line_items": [
+    {
+      "description": "Latte Macchiato",
+      "quantity": 2.0,
+      "unit_price": 4.5,
+      "line_total": 9.0
+    },
+    {
+      "description": "Gloki",
+      "quantity": 1.0,
+      "unit_price": 5.0,
+      "line_total": 5.0
+    },
+    {
+      "description": "Schweinschnitzel",
+      "quantity": 1.0,
+      "unit_price": 22.0,
+      "line_total": 22.0
+    },
+    {
+      "description": "Ch\u00e4ssp\u00e4tzli",
+      "quantity": 1.0,
+      "unit_price": 18.5,
+      "line_total": 18.5
+    }
+  ],
+  "raw_response": {
+    "vendor": "Berghotel Grosse Scheidegg",
+    "purchase_date": "2007-07-30",
+    "subtotal": 50.65,
+    "tax": 3.85,
+    "total": 54.5,
+    "currency": "CHF",
+    "category": "Food",
+    "line_items": [
+      {
+        "description": "Latte Macchiato",
+        "quantity": 2,
+        "unit_price": 4.5,
+        "line_total": 9.0
+      },
+      {
+        "description": "Gloki",
+        "quantity": 1,
+        "unit_price": 5.0,
+        "line_total": 5.0
+      },
+      {
+        "description": "Schweinschnitzel",
+        "quantity": 1,
+        "unit_price": 22.0,
+        "line_total": 22.0
+      },
+      {
+        "description": "Ch\u00e4ssp\u00e4tzli",
+        "quantity": 1,
+        "unit_price": 18.5,
+        "line_total": 18.5
+      }
+    ]
+  }
+}

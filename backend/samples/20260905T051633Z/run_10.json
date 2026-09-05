@@ -1,0 +1,16 @@
+{
+  "run": 10,
+  "started": "2026-09-05T05:31:39.073292+00:00",
+  "success": false,
+  "error": "Vision model request failed: BadRequestError: still failing after 3 attempts: Error code: 400 - {'error': {'message': \"Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.\", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}",
+  "vendor": null,
+  "purchase_date": null,
+  "subtotal": null,
+  "tax": null,
+  "total": null,
+  "currency": null,
+  "category": null,
+  "line_item_count": 0,
+  "line_items": [],
+  "raw_response": null
+}

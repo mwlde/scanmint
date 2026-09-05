@@ -1,0 +1,11 @@
+{
+  "rate_limited": true,
+  "tpd": {
+    "limit": 200000,
+    "used": 199981,
+    "requested": 2069,
+    "remaining": 19
+  },
+  "retry_after_s": 886,
+  "message": "Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kys5be0her8atw76dz3jm4be` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199981, Requested 2069. Please try again in 14m45.6s. Need more tokens? Upgrade to Dev Tier t"
+}

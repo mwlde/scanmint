@@ -149,6 +149,35 @@ export default function ReviewPage() {
 
   const totalValue = toNumber(form.total)
   const missingTotal = totalValue === null
+
+  // Line items that don't reconcile against the receipt's own totals mean something
+  // was dropped. Computed from live form state, not from the extraction response, so
+  // it clears as soon as the user fixes the items rather than nagging at a corrected
+  // receipt. Tolerance is proportional with a floor -- rounding, tips and small
+  // uncategorised fees stay under it. Mirrors item_sum_warning() in backend base.py.
+  const itemSumWarning = (() => {
+    // Which total the items should match depends on the receipt: VAT-inclusive
+    // prices already contain tax and sum to the total, VAT-exclusive ones sum to
+    // the subtotal. Accept either, or a correct receipt of the other kind warns.
+    const anchors = [toNumber(form.subtotal), totalValue].filter(
+      (n): n is number => n !== null,
+    )
+    if (anchors.length === 0) return null
+
+    const priced = form.line_items
+      .map(i => toNumber(i.line_total))
+      .filter((n): n is number => n !== null)
+    // Nothing itemised, or nothing priced: there is no sum to reconcile, and a
+    // sum of 0 would miss every anchor for the wrong reason.
+    if (priced.length === 0) return null
+    const itemsSum = priced.reduce((a, b) => a + b, 0)
+
+    const reconciles = anchors.some(
+      anchor => Math.abs(itemsSum - anchor) <= Math.max(1.0, Math.abs(anchor) * 0.02),
+    )
+    if (reconciles) return null
+    return "The line items don't add up to the total. Some items may be missing — please check."
+  })()
   const showErrorBanner = failed && !manualEntry
   const bareInput: React.CSSProperties = {
     border: 'none',
@@ -325,6 +354,19 @@ export default function ReviewPage() {
               Add item
             </button>
           </div>
+
+          {itemSumWarning && (
+            <div
+              role="status"
+              style={{
+                marginTop: 10, padding: '8px 10px', borderRadius: 8,
+                border: '1px solid var(--line)', background: 'var(--surface-2, #fff8e6)',
+                font: "500 12px/1.45 'Inter'", color: 'var(--ink-2)',
+              }}
+            >
+              {itemSumWarning}
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
             {form.line_items.map((item, i) => (

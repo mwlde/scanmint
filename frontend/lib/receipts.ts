@@ -346,9 +346,45 @@ export async function deleteReceipt(id: string): Promise<void> {
     return
   }
 
-  // receipt_line_items cascades on delete, so the parent row is enough.
+  // receipt_line_items cascades on delete, but storage objects do not -- a Postgres
+  // cascade cannot reach the bucket. Read the path before deleting the row, or it is
+  // gone and the image is orphaned in a private bucket forever.
+  const { data: row } = await supabase
+    .from('receipts')
+    .select('image_path')
+    .eq('id', id)
+    .single()
+
   const { error } = await supabase.from('receipts').delete().eq('id', id)
   if (error) throw error
+
+  // Best-effort, and only after the row is gone: the user asked for the receipt to
+  // be deleted, and a failure to tidy the bucket should not resurrect it in the UI.
+  //
+  // Failures are log-only for MVP -- we accept the drift rather than blocking a
+  // delete on it. The tag below is the grep handle: if someone ever reports "I
+  // deleted this and the image is still somewhere", search RECEIPT_IMAGE_ORPHANED
+  // for the receipt id. Note this runs in the browser, so the line lands in the
+  // user's console, not a server log -- knowing the real failure RATE needs
+  // telemetry, and reconciling the bucket against receipts.image_path needs a
+  // background job. Both are deliberate non-goals right now.
+  if (row?.image_path && !row.image_path.startsWith('data:')) {
+    const { data: removed, error: storageError } = await supabase.storage
+      .from(BUCKET)
+      .remove([row.image_path])
+
+    if (storageError) {
+      console.warn(
+        `RECEIPT_IMAGE_ORPHANED receipt=${id} path=${row.image_path} reason=${storageError.message}`,
+      )
+    } else if (!removed || removed.length === 0) {
+      // remove() reports no error for a path that was not there; the row is still
+      // deleted, but nothing was cleaned up and we should not pretend otherwise.
+      console.warn(
+        `RECEIPT_IMAGE_ORPHANED receipt=${id} path=${row.image_path} reason=no-object-removed`,
+      )
+    }
+  }
 }
 
 export async function updateReceipt(id: string, draft: ReceiptDraft): Promise<Receipt> {

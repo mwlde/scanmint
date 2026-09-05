@@ -1,0 +1,22 @@
+{
+  "run": 8,
+  "started": "2026-09-05T05:28:51.929815+00:00",
+  "success": false,
+  "error": "Too many requests. Please try again in about 1 minute.",
+  "vendor": null,
+  "purchase_date": null,
+  "subtotal": null,
+  "tax": null,
+  "total": null,
+  "currency": null,
+  "category": null,
+  "line_item_count": 0,
+  "line_items": [],
+  "raw_response": null,
+  "tpd": {
+    "limit": 1000,
+    "used": 157,
+    "requested": 900,
+    "remaining": 843
+  }
+}

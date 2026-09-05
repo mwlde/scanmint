@@ -1,0 +1,39 @@
+{
+  "run": 3,
+  "started": "2026-09-05T05:24:08.717635+00:00",
+  "success": true,
+  "error": null,
+  "vendor": "Berghotel Grosse Scheidegg",
+  "purchase_date": "2007-07-30",
+  "subtotal": 54.5,
+  "tax": 3.85,
+  "total": 54.5,
+  "currency": "CHF",
+  "category": "Food",
+  "line_item_count": 1,
+  "line_items": [
+    {
+      "description": "Latte Macchiato",
+      "quantity": 2.0,
+      "unit_price": 4.5,
+      "line_total": 9.0
+    }
+  ],
+  "raw_response": {
+    "vendor": "Berghotel Grosse Scheidegg",
+    "purchase_date": "2007-07-30",
+    "subtotal": 54.5,
+    "tax": 3.85,
+    "total": 54.5,
+    "currency": "CHF",
+    "category": "Food",
+    "line_items": [
+      {
+        "description": "Latte Macchiato",
+        "quantity": 2,
+        "unit_price": 4.5,
+        "line_total": 9.0
+      }
+    ]
+  }
+}

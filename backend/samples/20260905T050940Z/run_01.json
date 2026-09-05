@@ -1,0 +1,16 @@
+{
+  "run": 1,
+  "started": "2026-09-05T05:09:47.780930+00:00",
+  "success": false,
+  "error": "Too many requests. Please try again later.",
+  "vendor": null,
+  "purchase_date": null,
+  "subtotal": null,
+  "tax": null,
+  "total": null,
+  "currency": null,
+  "category": null,
+  "line_item_count": 0,
+  "line_items": [],
+  "raw_response": null
+}

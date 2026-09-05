@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+
+from src.extraction import get_provider, ExtractionProvider, ExtractionResult
+
+load_dotenv()
 import base64
 import json
 import logging
@@ -222,6 +227,19 @@ _STUB_EXTRACTION = {
 }
 
 
+# 𓆝 𓆟 𓆞 𓆟 𓆝 extraction provider
+
+# built once and reused, so we're not spinning up a fresh http client per request.
+_provider: ExtractionProvider | None = None
+
+
+def _get_provider() -> ExtractionProvider:
+    global _provider
+    if _provider is None:
+        _provider = get_provider()
+    return _provider
+
+
 # takes an uploaded receipt photo, flattens it through the cv pipeline, saves the flattened
 # image to disk, and returns hardcoded receipt fields alongside the image path.
 #
@@ -257,10 +275,27 @@ async def extract(
         log.exception("could not write the flattened image to %s", SCANS_DIR)
         return JSONResponse(status_code=500, content={"error": "Could not save the flattened image."})
 
+    # JPEG for the vision model: smaller payload, plenty of quality for OCR.
+    _, jpg_buf = cv2.imencode(".jpg", result.warped, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    image_bytes = jpg_buf.tobytes()
+
+    try:
+        extraction = await _get_provider().extract(image_bytes, mime_type="image/jpeg")
+    except Exception:
+        # defense in depth: providers should catch their own errors, but if one leaks
+        # through we still return the flattened image so the review card can render.
+        log.exception("extraction provider raised unexpectedly")
+        extraction = ExtractionResult(
+            provider="unknown",
+            model="unknown",
+            success=False,
+            error_message="Extraction crashed unexpectedly.",
+        )
+
     return {
-        **_STUB_EXTRACTION,
-        "image_path":     str(image_path),                # absolute path on the server
-        "image_url":      f"/scans/{image_path.name}",    # join onto NEXT_PUBLIC_SCAN_API to display it
+        **extraction.to_dict(),
+        "image_path":     str(image_path),
+        "image_url":      f"/scans/{image_path.name}",
         "document_found": result.document_found,
         "used_manual_corners": manual_corners is not None,
     }
